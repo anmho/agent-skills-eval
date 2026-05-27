@@ -34,6 +34,12 @@ export interface ProviderResult {
   provider: string;
   model: string;
   output: string;
+  /** Provider-returned chain-of-thought / thinking trace, when available.
+   *  e.g. DeepSeek `message.reasoning_content`, OpenAI o-series reasoning,
+   *  Anthropic `<thinking>` blocks. Separated from `output` so the user-facing
+   *  message can be graded for clean wording while the trace stays available
+   *  to assertions about intent and tool-selection reasoning. */
+  reasoningText?: string;
   latencyMs: number;
   inputTokens: number;
   outputTokens: number;
@@ -42,9 +48,32 @@ export interface ProviderResult {
   toolCalls?: ToolCall[];
 }
 
+/** Multi-turn chat message. Providers consume these verbatim when the caller
+ *  supplies `messages`. Used by the multi-turn tool-result loop to feed model
+ *  outputs and synthetic tool results back in for the next turn. */
+export interface ChatMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  /** Required for `role: "tool"`. Matches the id of the originating tool_call. */
+  tool_call_id?: string;
+  /** For `role: "assistant"` messages that include tool calls from a previous turn. */
+  tool_calls?: Array<{
+    id?: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
+  /** DeepSeek-only: when replaying an assistant turn that previously emitted
+   *  thinking-mode reasoning, the upstream rejects the request unless this is
+   *  echoed back. Harmless on providers that ignore it. */
+  reasoning_content?: string;
+}
+
 export interface CompleteChatArgs {
   system?: string;
   user: string;
+  /** Full conversation. When provided, `system` and `user` are ignored. Use
+   *  this for multi-turn tool-result loops. */
+  messages?: ChatMessage[];
   model?: string;
   attachments?: AttachedFile[];
   tools?: ToolDef[];

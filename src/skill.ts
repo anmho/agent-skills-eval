@@ -336,14 +336,28 @@ function parseDefaults(value: unknown): SkillDefaults | undefined {
       ? parseParams((r.judge as Record<string, unknown>).params, "defaults.judge")
       : undefined;
   const tools = parseTools(r.tools, "defaults");
+  // tool_mocks is opaque pass-through — the runner consumes it as
+  // Record<string, unknown> and resolves at loop time. JSON-only constraint
+  // is enforced by `JSON.parse` of the surrounding file, so accept any object
+  // shape here without further schema policing.
+  const toolMocks =
+    r.tool_mocks && typeof r.tool_mocks === "object" && !Array.isArray(r.tool_mocks)
+      ? (r.tool_mocks as Record<string, unknown>)
+      : undefined;
 
-  if (targetParams === undefined && judgeParams === undefined && tools === undefined) {
+  if (
+    targetParams === undefined &&
+    judgeParams === undefined &&
+    tools === undefined &&
+    toolMocks === undefined
+  ) {
     return undefined;
   }
   return {
     target: targetParams ? { params: targetParams } : undefined,
     judge: judgeParams ? { params: judgeParams } : undefined,
     tools,
+    tool_mocks: toolMocks,
   };
 }
 

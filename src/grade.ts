@@ -15,6 +15,10 @@ export interface GradingJson {
 
 export interface GradeOutputsArgs {
   modelOutput: string;
+  /** Provider chain-of-thought / reasoning trace, if captured. Surfaced to the
+   *  judge as a separate evidence section so assertions about intent or tool
+   *  selection can grade the trace independently of the user-facing output. */
+  reasoningText?: string;
   outputFiles?: AttachedFile[];
   /** Free-form rubric assertions (graded by the LLM judge). */
   assertions: string[];
@@ -109,8 +113,11 @@ function renderRubricPrompt(
       "Assertions:",
       JSON.stringify(args.assertions, null, 2),
       "",
-      "Model output:",
+      "Model output (user-facing):",
       args.modelOutput,
+      args.reasoningText
+        ? `\n\nReasoning trace (internal, not shown to user):\n${args.reasoningText}`
+        : "",
       args.toolCalls && args.toolCalls.length > 0
         ? `\n\nTool calls (structured):\n${serializeToolCalls(args.toolCalls)}`
         : "",
@@ -130,6 +137,9 @@ function renderRubricPrompt(
     "- PASS an assertion only if every condition in the assertion text holds.",
     "- A label without substance is a FAIL.",
     "- Tool calls (when present) are authoritative evidence of model behavior.",
+    "- The reasoning trace (when present) is internal thinking, NOT shown to the user.",
+    "  Use it to verify the model picked the right approach. Do NOT count claims in the",
+    "  reasoning trace toward an assertion about the user-facing output.",
     "",
     "Return STRICT JSON only. No markdown. Shape:",
     '{"assertion_results":[{"text":"...","passed":true,"evidence":"..."}],"summary":{"passed":0,"failed":0,"total":0,"pass_rate":0}}',
@@ -143,8 +153,11 @@ function renderRubricPrompt(
     "Assertions:",
     JSON.stringify(args.assertions, null, 2),
     "",
-    "Model output:",
+    "Model output (user-facing):",
     args.modelOutput || "(empty output)",
+    args.reasoningText
+      ? `\nReasoning trace (internal, not shown to user):\n${args.reasoningText}`
+      : "",
     args.toolCalls && args.toolCalls.length > 0
       ? `\nTool calls (structured):\n${serializeToolCalls(args.toolCalls)}`
       : "",

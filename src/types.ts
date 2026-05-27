@@ -46,6 +46,14 @@ export interface SkillDefaults {
   judge?: { params?: Record<string, unknown> };
   /** Tools provided to every case in this skill unless the case overrides. */
   tools?: ToolDef[];
+  /** Synthetic tool results returned to the model in the multi-turn loop.
+   *  Key = tool name. Value = either an arbitrary object that gets serialized
+   *  as the tool's return JSON, the string "echo" to echo parsed arguments, or
+   *  "echo_gmail_url" to synthesize a mail.google.com deeplink from thread_id.
+   *  Lets evals shape the fake world (e.g. return a Gmail thread
+   *  list so the model can pick one). When unset for a given tool, the loop
+   *  returns `{"ok": true}`. */
+  tool_mocks?: Record<string, unknown>;
 }
 
 export interface Skill {

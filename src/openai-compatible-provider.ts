@@ -28,7 +28,14 @@ interface OpenAIToolCallWire {
 
 interface OpenAIChatResponse {
   choices: Array<{
-    message: { content: string | null; tool_calls?: OpenAIToolCallWire[] };
+    message: {
+      content: string | null;
+      tool_calls?: OpenAIToolCallWire[];
+      /** DeepSeek + xAI Grok return chain-of-thought here. */
+      reasoning_content?: string | null;
+      /** OpenRouter normalizes reasoning to this field. */
+      reasoning?: string | null;
+    };
     finish_reason?: string;
   }>;
   usage?: {
@@ -127,6 +134,17 @@ export class OpenAICompatibleProvider implements Provider {
   async completeChat(args: {
     system?: string;
     user: string;
+    messages?: Array<{
+      role: "system" | "user" | "assistant" | "tool";
+      content: string | null;
+      tool_call_id?: string;
+      tool_calls?: Array<{
+        id?: string;
+        type: "function";
+        function: { name: string; arguments: string };
+      }>;
+      reasoning_content?: string;
+    }>;
     attachments?: AttachedFile[];
     tools?: ToolDef[];
     toolChoice?: ToolChoice;
@@ -134,12 +152,16 @@ export class OpenAICompatibleProvider implements Provider {
   }): Promise<ProviderResult> {
     const start = Date.now();
     try {
+      // When the caller supplies a `messages` array, treat it as the full
+      // conversation (used by the multi-turn tool-result loop). Otherwise fall
+      // back to the legacy single-turn shape built from `system` + `user`.
+      const messages = args.messages ?? [
+        ...(args.system ? [{ role: "system" as const, content: args.system }] : []),
+        { role: "user" as const, content: args.user },
+      ];
       const body: Record<string, unknown> = {
         model: this.model,
-        messages: [
-          ...(args.system ? [{ role: "system", content: args.system }] : []),
-          { role: "user", content: args.user },
-        ],
+        messages,
       };
 
       // Constructor-level convenience defaults — applied only when the caller
@@ -190,8 +212,10 @@ export class OpenAICompatibleProvider implements Provider {
       const latencyMs = Date.now() - start;
       const inputTokens = data.usage?.prompt_tokens ?? 0;
       const outputTokens = data.usage?.completion_tokens ?? 0;
-      const output = data.choices[0]?.message.content ?? "";
-      const toolCalls = parseToolCalls(data.choices[0]?.message.tool_calls);
+      const message = data.choices[0]?.message;
+      const output = message?.content ?? "";
+      const toolCalls = parseToolCalls(message?.tool_calls);
+      const reasoningText = message?.reasoning_content || message?.reasoning || undefined;
       const promptCost = data.usage?.costs?.prompt ?? 0;
       const completionCost = data.usage?.costs?.completion ?? 0;
 
@@ -199,6 +223,7 @@ export class OpenAICompatibleProvider implements Provider {
         provider: this.name,
         model: this.model,
         output,
+        reasoningText: reasoningText ?? undefined,
         latencyMs,
         inputTokens,
         outputTokens,
